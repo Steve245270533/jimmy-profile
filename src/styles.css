@@ -45,7 +45,6 @@ body::after {
     inset: auto;
     pointer-events: none;
     z-index: 0;
-    filter: blur(0.4px);
 }
 
 body::before {
@@ -85,6 +84,7 @@ body::after {
         radial-gradient(circle at 60% 70%, rgba(98, 64, 37, 0.16) 0 0.8px, transparent 0.9px);
     background-size: 14px 14px, 16px 16px, 18px 18px;
     z-index: 0;
+    contain: paint;
 }
 
 .card-stage {
@@ -102,6 +102,8 @@ body::after {
         inset 0 1px 0 rgba(255, 255, 255, 0.85);
     padding: 1.25rem;
     overflow: hidden;
+    isolation: isolate;
+    contain: layout paint;
 }
 
 .card-stage::before,
@@ -299,6 +301,8 @@ body::after {
     place-items: center;
     min-height: 450px;
     padding: 0.35rem 0;
+    isolation: isolate;
+    contain: layout paint;
 }
 
 .spotlight-ring {
@@ -323,7 +327,7 @@ body::after {
     height: 56px;
     border-radius: 50%;
     background: radial-gradient(circle, rgba(208, 125, 78, 0.18) 0%, rgba(208, 125, 78, 0.04) 62%, transparent 80%);
-    filter: blur(8px);
+    opacity: 0.85;
 }
 
 .sprite-portrait {
@@ -347,6 +351,10 @@ body::after {
     box-shadow:
         0 20px 32px rgba(122, 84, 51, 0.18),
         inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    contain: paint;
+    isolation: isolate;
+    transform: translateZ(0);
+    backface-visibility: hidden;
 }
 
 .sprite-window::before {
@@ -365,15 +373,12 @@ body::after {
 
 .sprite-sheet {
     position: absolute;
-    inset: 0 auto auto 0;
-    width: var(--frame-width);
-    height: var(--frame-height);
-    background-image: url("./assets/sprite.webp");
-    background-repeat: no-repeat;
-    background-size: 10008px 11120px;
-    transform-origin: top left;
-    transform: scale(calc(min(420, max(260, 36vw)) / var(--frame-width)));
-    will-change: transform, background-position;
+    inset: 0;
+    background: url("./assets/sprite.webp") no-repeat 0 0 / 1200% 1000%;
+    will-change: background-position;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    image-rendering: -webkit-optimize-contrast;
 }
 
 .sprite-caption {

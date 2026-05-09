@@ -12,22 +12,41 @@ const profile = {
 };
 
 const spriteConfig = {
-    src: "./assets/sprite.webp",
     cols: 12,
     rows: 10,
     validFrames: 115,
-    frameWidth: 834,
-    frameHeight: 1112,
     defaultFrame: 0,
-    smoothing: 0.24,
-    pointerBlendSmoothing: 0.42,
-    idleDelay: 1800,
     orientationTilt: 18,
-    invertDirection: true
+    invertDirection: true,
+    nearLockRatio: 0.12,
+    angleDeadZone: 2.5,
+    frameDeadZone: 1
 };
 
-const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const totalFrames = spriteConfig.validFrames;
+const fullTurn = Math.PI * 2;
+
+const framePositions = Array.from({ length: totalFrames }, (_, frame) => {
+    const row = Math.floor(frame / spriteConfig.cols);
+    const col = frame % spriteConfig.cols;
+
+    return {
+        x: spriteConfig.cols === 1 ? 0 : (col / (spriteConfig.cols - 1)) * 100,
+        y: spriteConfig.rows === 1 ? 0 : (row / (spriteConfig.rows - 1)) * 100
+    };
+});
+
+const angleFrameKeys = [
+    [0, 0],
+    [45, Math.round(totalFrames * 0.125)],
+    [90, Math.round(totalFrames * 0.25)],
+    [135, Math.round(totalFrames * 0.375)],
+    [180, Math.round(totalFrames * 0.5)],
+    [225, Math.round(totalFrames * 0.625)],
+    [270, Math.round(totalFrames * 0.75)],
+    [315, Math.round(totalFrames * 0.875)],
+    [360, totalFrames]
+];
 
 const elements = {
     basicList: document.getElementById("profile-basic-list"),
@@ -41,14 +60,17 @@ const elements = {
 };
 
 const state = {
-    currentFrame: spriteConfig.defaultFrame,
-    targetFrame: spriteConfig.defaultFrame,
-    rafId: 0,
-    idleTimer: 0,
+    pointerX: -1000,
+    pointerY: -1000,
+    orientationX: 0,
+    orientationY: 0,
+    renderedFrame: -1,
+    renderScheduled: false,
     sensorActive: false,
     pointerActive: false,
     orientationHandler: null,
-    lastTouchTime: 0
+    spriteRect: null,
+    lastAngle: null
 };
 
 function populateProfile() {
@@ -83,135 +105,142 @@ function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
 
-function normalizeFrame(frame) {
-    return ((frame % totalFrames) + totalFrames) % totalFrames;
-}
-
 function normalizeFrameIndex(frame) {
     return ((Math.round(frame) % totalFrames) + totalFrames) % totalFrames;
 }
 
-function frameToPosition(frame) {
-    const normalized = normalizeFrameIndex(frame);
-    const row = Math.floor(normalized / spriteConfig.cols);
-    const col = normalized % spriteConfig.cols;
+function setFrame(frame) {
+    const frameIndex = normalizeFrameIndex(frame);
 
-    return {
-        x: -(col * spriteConfig.frameWidth),
-        y: -(row * spriteConfig.frameHeight)
-    };
-}
-
-function renderFrame(frame) {
-    const normalized = normalizeFrame(frame);
-    const position = frameToPosition(normalized);
-
-    elements.spriteSheet.style.backgroundPosition = `${position.x}px ${position.y}px`;
-    elements.spriteSheet.dataset.frame = String(normalizeFrameIndex(normalized));
-    elements.spriteWindow.dataset.frame = normalized.toFixed(3);
-}
-
-function stopAnimationLoop() {
-    if (!state.rafId) {
+    if (frameIndex === state.renderedFrame) {
         return;
     }
 
-    window.cancelAnimationFrame(state.rafId);
-    state.rafId = 0;
+    state.renderedFrame = frameIndex;
+
+    const position = framePositions[frameIndex];
+    elements.spriteSheet.style.backgroundPosition = `${position.x}% ${position.y}%`;
 }
 
-function scheduleIdleReset() {
-    clearTimeout(state.idleTimer);
-    elements.spriteWindow.classList.remove("is-idle");
-
-    state.idleTimer = window.setTimeout(() => {
-        setTargetFrame(spriteConfig.defaultFrame, { resetIdle: false });
-        elements.spriteWindow.classList.add("is-idle");
-    }, spriteConfig.idleDelay);
+function updateSpriteRect() {
+    state.spriteRect = elements.spriteWindow.getBoundingClientRect();
 }
 
-function setTargetFrame(frame, options = {}) {
-    const { immediate = false, resetIdle = true, smoothing = spriteConfig.smoothing } = options;
-    state.targetFrame = normalizeFrame(frame);
-
-    if (resetIdle) {
-        scheduleIdleReset();
-    }
-
-    if (immediate || prefersReducedMotion) {
-        const delta = state.targetFrame - state.currentFrame;
-        const wrappedDelta = delta > totalFrames / 2
-            ? delta - totalFrames
-            : delta < -totalFrames / 2
-                ? delta + totalFrames
-                : delta;
-
-        stopAnimationLoop();
-        state.currentFrame = normalizeFrame(state.currentFrame + wrappedDelta * smoothing);
-        renderFrame(state.currentFrame);
+function scheduleRender() {
+    if (state.renderScheduled) {
         return;
     }
 
-    startAnimationLoop();
+    state.renderScheduled = true;
+    window.requestAnimationFrame(render);
 }
 
-function startAnimationLoop() {
-    if (prefersReducedMotion) {
-        state.currentFrame = state.targetFrame;
-        renderFrame(state.currentFrame);
-        return;
-    }
+function getCircularDistance(a, b, modulo) {
+    const distance = Math.abs(a - b) % modulo;
+    return Math.min(distance, modulo - distance);
+}
 
-    if (state.rafId) {
-        return;
-    }
+function getSignedAngleDistance(from, to) {
+    return ((to - from + 540) % 360) - 180;
+}
 
-    const tick = () => {
-        const delta = state.targetFrame - state.currentFrame;
-        const wrappedDelta = delta > totalFrames / 2
-            ? delta - totalFrames
-            : delta < -totalFrames / 2
-                ? delta + totalFrames
-                : delta;
+function angleToFrame(degrees) {
+    const normalized = ((degrees % 360) + 360) % 360;
 
-        if (Math.abs(wrappedDelta) < 0.02) {
-            state.currentFrame = state.targetFrame;
-            renderFrame(state.currentFrame);
-            state.rafId = 0;
-            return;
+    for (let i = 0; i < angleFrameKeys.length - 1; i++) {
+        const [a0, f0] = angleFrameKeys[i];
+        const [a1, f1] = angleFrameKeys[i + 1];
+
+        if (normalized >= a0 && normalized <= a1) {
+            const t = (normalized - a0) / (a1 - a0);
+            return normalizeFrameIndex(f0 + (f1 - f0) * t);
         }
+    }
 
-        state.currentFrame += wrappedDelta * spriteConfig.smoothing;
-        renderFrame(state.currentFrame);
-        state.rafId = window.requestAnimationFrame(tick);
-    };
-
-    state.rafId = window.requestAnimationFrame(tick);
+    return spriteConfig.defaultFrame;
 }
 
 function directionToFrame(deltaX, deltaY) {
     const angle = Math.atan2(deltaY, deltaX);
     const correctedAngle = spriteConfig.invertDirection ? angle + Math.PI : angle;
     const normalizedAngle = correctedAngle < 0
-        ? correctedAngle + Math.PI * 2
-        : correctedAngle % (Math.PI * 2);
-    const frame = (normalizedAngle / (Math.PI * 2)) * totalFrames;
+        ? correctedAngle + fullTurn
+        : correctedAngle % fullTurn;
+    const degrees = normalizedAngle * 180 / Math.PI;
 
-    return normalizeFrame(frame);
+    if (state.lastAngle !== null && Math.abs(getSignedAngleDistance(state.lastAngle, degrees)) < spriteConfig.angleDeadZone) {
+        return state.renderedFrame < 0 ? spriteConfig.defaultFrame : state.renderedFrame;
+    }
+
+    const nextFrame = angleToFrame(degrees);
+
+    if (
+        state.renderedFrame >= 0
+        && getCircularDistance(nextFrame, state.renderedFrame, totalFrames) <= spriteConfig.frameDeadZone
+    ) {
+        return state.renderedFrame;
+    }
+
+    state.lastAngle = degrees;
+    return nextFrame;
 }
 
-function getPointerFrame(clientX, clientY) {
-    const rect = elements.spriteWindow.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const deltaX = clientX - centerX;
-    const deltaY = clientY - centerY;
+function pointerToFrame() {
+    if (!state.pointerActive) {
+        return spriteConfig.defaultFrame;
+    }
 
-    if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) {
+    if (!state.spriteRect) {
+        updateSpriteRect();
+    }
+
+    const centerX = state.spriteRect.left + state.spriteRect.width / 2;
+    const centerY = state.spriteRect.top + state.spriteRect.height / 2;
+    const deltaX = state.pointerX - centerX;
+    const deltaY = state.pointerY - centerY;
+    const distance = Math.hypot(deltaX, deltaY);
+    const lockRadius = Math.min(state.spriteRect.width, state.spriteRect.height) * 0.5 * spriteConfig.nearLockRatio;
+
+    if (distance < lockRadius) {
+        state.lastAngle = null;
         return spriteConfig.defaultFrame;
     }
 
     return directionToFrame(deltaX, deltaY);
+}
+
+function orientationToFrame() {
+    const x = clamp(state.orientationX / spriteConfig.orientationTilt, -1, 1);
+    const y = clamp(state.orientationY / spriteConfig.orientationTilt, -1, 1);
+
+    if (Math.abs(x) < 0.08 && Math.abs(y) < 0.08) {
+        state.lastAngle = null;
+        return spriteConfig.defaultFrame;
+    }
+
+    return directionToFrame(x, y);
+}
+
+function render() {
+    state.renderScheduled = false;
+
+    if (!state.spriteRect) {
+        updateSpriteRect();
+    }
+
+    setFrame(state.sensorActive ? orientationToFrame() : pointerToFrame());
+}
+
+function setPointer(clientX, clientY) {
+    state.pointerX = clientX;
+    state.pointerY = clientY;
+
+    if (!state.pointerActive) {
+        state.pointerActive = true;
+        elements.spriteWindow.classList.remove("is-idle");
+    }
+
+    scheduleRender();
 }
 
 function handlePointerMove(event) {
@@ -219,19 +248,20 @@ function handlePointerMove(event) {
         return;
     }
 
-    state.pointerActive = true;
-    setTargetFrame(getPointerFrame(event.clientX, event.clientY), {
-        immediate: true,
-        smoothing: spriteConfig.pointerBlendSmoothing
-    });
+    setPointer(event.clientX, event.clientY);
 }
 
 function handlePointerLeave() {
+    if (!state.pointerActive) {
+        return;
+    }
+
     state.pointerActive = false;
-    clearTimeout(state.idleTimer);
-    stopAnimationLoop();
+    state.pointerX = -1000;
+    state.pointerY = -1000;
+    state.lastAngle = null;
+    setFrame(spriteConfig.defaultFrame);
     elements.spriteWindow.classList.add("is-idle");
-    setTargetFrame(spriteConfig.defaultFrame, { immediate: true, resetIdle: false });
 }
 
 function handleTouchMove(event) {
@@ -239,31 +269,8 @@ function handleTouchMove(event) {
         return;
     }
 
-    state.lastTouchTime = Date.now();
     const touch = event.touches[0];
-    setTargetFrame(getPointerFrame(touch.clientX, touch.clientY), {
-        immediate: true,
-        smoothing: spriteConfig.pointerBlendSmoothing
-    });
-}
-
-function handleTouchEnd() {
-    if (Date.now() - state.lastTouchTime < 140) {
-        return;
-    }
-
-    handlePointerLeave();
-}
-
-function orientationToFrame(beta, gamma) {
-    const x = clamp(gamma / spriteConfig.orientationTilt, -1, 1);
-    const y = clamp(beta / spriteConfig.orientationTilt, -1, 1);
-
-    if (Math.abs(x) < 0.08 && Math.abs(y) < 0.08) {
-        return spriteConfig.defaultFrame;
-    }
-
-    return directionToFrame(x, y);
+    setPointer(touch.clientX, touch.clientY);
 }
 
 function setSensorMessage(message, disabled = false) {
@@ -282,14 +289,17 @@ function bindOrientationListener() {
     }
 
     state.orientationHandler = (event) => {
-        const beta = typeof event.beta === "number" ? event.beta : 0;
-        const gamma = typeof event.gamma === "number" ? event.gamma : 0;
-        setTargetFrame(orientationToFrame(beta, gamma));
+        state.orientationY = typeof event.beta === "number" ? event.beta : 0;
+        state.orientationX = typeof event.gamma === "number" ? event.gamma : 0;
+        scheduleRender();
     };
 
     window.addEventListener("deviceorientation", state.orientationHandler, true);
     state.sensorActive = true;
-    setSensorMessage("感应模式已开启。轻轻转动设备，Jimmy 会跟着你的方向缓慢转头。");
+    state.lastAngle = null;
+    elements.spriteWindow.classList.remove("is-idle");
+    setSensorMessage("感应模式已开启。轻轻转动设备，Jimmy 会跟着你的方向转头。");
+    scheduleRender();
 }
 
 async function activateSensorMode() {
@@ -317,36 +327,23 @@ async function activateSensorMode() {
     }
 }
 
-function applySpriteSizing() {
-    const width = getComputedStyle(elements.spriteWindow).width;
-    const numericWidth = parseFloat(width);
-
-    if (!Number.isFinite(numericWidth) || numericWidth <= 0) {
-        return;
-    }
-
-    const scale = numericWidth / spriteConfig.frameWidth;
-    elements.spriteSheet.style.transform = `scale(${scale})`;
-}
-
 function bindEvents() {
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("pointerleave", handlePointerLeave, { passive: true });
-    window.addEventListener("resize", applySpriteSizing, { passive: true });
+    window.addEventListener("resize", updateSpriteRect, { passive: true });
+    window.addEventListener("scroll", updateSpriteRect, { passive: true });
 
     elements.spriteWindow.addEventListener("touchstart", handleTouchMove, { passive: true });
     elements.spriteWindow.addEventListener("touchmove", handleTouchMove, { passive: true });
-    elements.spriteWindow.addEventListener("touchend", handleTouchEnd, { passive: true });
 
     elements.sensorButton.addEventListener("click", activateSensorMode);
 }
 
 function initialize() {
     populateProfile();
-    elements.spriteSheet.style.backgroundImage = `url("${spriteConfig.src}")`;
-    renderFrame(spriteConfig.defaultFrame);
+    updateSpriteRect();
+    setFrame(spriteConfig.defaultFrame);
     elements.spriteWindow.classList.add("is-idle");
-    applySpriteSizing();
     bindEvents();
 }
 
