@@ -49,6 +49,12 @@ const angleFrameKeys = [
     [360, totalFrames]
 ];
 
+const leftMiddleConfig = {
+    angleWindow: 28,
+    frameStart: (spriteConfig.rows - 2) * spriteConfig.cols,
+    frameEnd: (spriteConfig.rows - 1) * spriteConfig.cols + 2
+};
+
 const elements = {
     basicList: document.getElementById("profile-basic-list"),
     likesList: document.getElementById("likes-list"),
@@ -147,8 +153,24 @@ function getSignedAngleDistance(from, to) {
     return ((to - from + 540) % 360) - 180;
 }
 
+function leftMiddleAngleToFrame(degrees) {
+    const signedAngle = degrees > 180 ? degrees - 360 : degrees;
+
+    if (Math.abs(signedAngle) > leftMiddleConfig.angleWindow) {
+        return null;
+    }
+
+    const progress = (signedAngle + leftMiddleConfig.angleWindow) / (leftMiddleConfig.angleWindow * 2);
+    return normalizeFrameIndex(leftMiddleConfig.frameStart + (leftMiddleConfig.frameEnd - leftMiddleConfig.frameStart) * progress);
+}
+
 function angleToFrame(degrees) {
     const normalized = ((degrees % 360) + 360) % 360;
+    const leftMiddleFrame = leftMiddleAngleToFrame(normalized);
+
+    if (leftMiddleFrame !== null) {
+        return leftMiddleFrame;
+    }
 
     for (let i = 0; i < angleFrameKeys.length - 1; i++) {
         const [a0, f0] = angleFrameKeys[i];
