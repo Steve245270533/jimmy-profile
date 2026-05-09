@@ -1,7 +1,7 @@
 const profile = {
     nameEn: "Jimmy",
     nameZh: "吉咪",
-    birthday: "2024.04.18",
+    birthday: "2024.10.21",
     hobbies: ["突然疯跑", "红外线高速追击", "趴在床上睡", "拍屁股"],
     traits: [
         "先观察，再慢悠悠靠近你。",
