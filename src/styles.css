@@ -373,15 +373,7 @@ body::after {
     background-size: 10008px 11120px;
     transform-origin: top left;
     transform: scale(calc(min(420, max(260, 36vw)) / var(--frame-width)));
-    will-change: transform, opacity, background-position;
-}
-
-.sprite-sheet-base {
-    opacity: 1;
-}
-
-.sprite-sheet-blend {
-    opacity: 0;
+    will-change: transform, background-position;
 }
 
 .sprite-caption {

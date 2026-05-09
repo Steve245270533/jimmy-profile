@@ -15,6 +15,7 @@ const spriteConfig = {
     src: "./assets/sprite.webp",
     cols: 12,
     rows: 10,
+    validFrames: 115,
     frameWidth: 834,
     frameHeight: 1112,
     defaultFrame: 0,
@@ -26,7 +27,7 @@ const spriteConfig = {
 };
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const totalFrames = spriteConfig.cols * spriteConfig.rows;
+const totalFrames = spriteConfig.validFrames;
 
 const elements = {
     basicList: document.getElementById("profile-basic-list"),
@@ -36,8 +37,7 @@ const elements = {
     sensorButton: document.getElementById("sensor-button"),
     sensorHint: document.getElementById("sensor-hint"),
     spriteWindow: document.getElementById("sprite-window"),
-    spriteSheetBase: document.getElementById("sprite-sheet-base"),
-    spriteSheetBlend: document.getElementById("sprite-sheet-blend")
+    spriteSheet: document.getElementById("sprite-sheet")
 };
 
 const state = {
@@ -88,7 +88,7 @@ function normalizeFrame(frame) {
 }
 
 function normalizeFrameIndex(frame) {
-    return normalizeFrame(Math.round(frame));
+    return ((Math.round(frame) % totalFrames) + totalFrames) % totalFrames;
 }
 
 function frameToPosition(frame) {
@@ -104,18 +104,10 @@ function frameToPosition(frame) {
 
 function renderFrame(frame) {
     const normalized = normalizeFrame(frame);
-    const baseFrame = Math.floor(normalized);
-    const blendFrame = normalizeFrameIndex(baseFrame + 1);
-    const mix = normalized - baseFrame;
-    const basePosition = frameToPosition(baseFrame);
-    const blendPosition = frameToPosition(blendFrame);
+    const position = frameToPosition(normalized);
 
-    elements.spriteSheetBase.style.backgroundPosition = `${basePosition.x}px ${basePosition.y}px`;
-    elements.spriteSheetBlend.style.backgroundPosition = `${blendPosition.x}px ${blendPosition.y}px`;
-    elements.spriteSheetBase.style.opacity = `${1 - mix}`;
-    elements.spriteSheetBlend.style.opacity = `${mix}`;
-    elements.spriteSheetBase.dataset.frame = String(baseFrame);
-    elements.spriteSheetBlend.dataset.frame = String(blendFrame);
+    elements.spriteSheet.style.backgroundPosition = `${position.x}px ${position.y}px`;
+    elements.spriteSheet.dataset.frame = String(normalizeFrameIndex(normalized));
     elements.spriteWindow.dataset.frame = normalized.toFixed(3);
 }
 
@@ -334,8 +326,7 @@ function applySpriteSizing() {
     }
 
     const scale = numericWidth / spriteConfig.frameWidth;
-    elements.spriteSheetBase.style.transform = `scale(${scale})`;
-    elements.spriteSheetBlend.style.transform = `scale(${scale})`;
+    elements.spriteSheet.style.transform = `scale(${scale})`;
 }
 
 function bindEvents() {
@@ -352,8 +343,7 @@ function bindEvents() {
 
 function initialize() {
     populateProfile();
-    elements.spriteSheetBase.style.backgroundImage = `url("${spriteConfig.src}")`;
-    elements.spriteSheetBlend.style.backgroundImage = `url("${spriteConfig.src}")`;
+    elements.spriteSheet.style.backgroundImage = `url("${spriteConfig.src}")`;
     renderFrame(spriteConfig.defaultFrame);
     elements.spriteWindow.classList.add("is-idle");
     applySpriteSizing();
