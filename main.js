@@ -16,26 +16,18 @@ const spriteConfig = {
     rows: 10,
     validFrames: 115,
     defaultFrame: 0,
+    frameWidth: 834,
+    frameHeight: 1112,
     orientationTilt: 18,
     invertDirection: true,
     nearLockRatio: 0.12,
     angleDeadZone: 2.5,
-    frameDeadZone: 1,
-    loaderTimeoutMs: 5000
+    frameDeadZone: 1
 };
 
 const totalFrames = spriteConfig.validFrames;
 const fullTurn = Math.PI * 2;
-
-const framePositions = Array.from({ length: totalFrames }, (_, frame) => {
-    const row = Math.floor(frame / spriteConfig.cols);
-    const col = frame % spriteConfig.cols;
-
-    return {
-        x: spriteConfig.cols === 1 ? 0 : (col / (spriteConfig.cols - 1)) * 100,
-        y: spriteConfig.rows === 1 ? 0 : (row / (spriteConfig.rows - 1)) * 100
-    };
-});
+const spriteAssetUrl = new URL("./assets/sprite.webp", window.location.href).href;
 
 const angleFrameKeys = [
     [0, 0],
@@ -63,7 +55,7 @@ const elements = {
     sensorButton: document.getElementById("sensor-button"),
     sensorHint: document.getElementById("sensor-hint"),
     spriteWindow: document.getElementById("sprite-window"),
-    spriteSheet: document.getElementById("sprite-sheet"),
+    spriteCanvas: document.getElementById("sprite-canvas"),
     spriteLoader: document.getElementById("sprite-loader")
 };
 
@@ -79,7 +71,13 @@ const state = {
     orientationHandler: null,
     spriteRect: null,
     lastAngle: null,
-    spriteReady: false
+    spriteReady: false,
+    frameBitmaps: [],
+    sourceImage: null,
+    canvasContext: null,
+    canvasCssWidth: 0,
+    canvasCssHeight: 0,
+    canvasPixelRatio: 1
 };
 
 function populateProfile() {
@@ -118,7 +116,7 @@ function normalizeFrameIndex(frame) {
     return ((Math.round(frame) % totalFrames) + totalFrames) % totalFrames;
 }
 
-function setFrame(frame) {
+function drawFrame(frame) {
     const frameIndex = normalizeFrameIndex(frame);
 
     if (frameIndex === state.renderedFrame) {
@@ -127,12 +125,19 @@ function setFrame(frame) {
 
     state.renderedFrame = frameIndex;
 
-    const position = framePositions[frameIndex];
-    elements.spriteSheet.style.backgroundPosition = `${position.x}% ${position.y}%`;
+    const frameCanvas = state.frameBitmaps[frameIndex];
+
+    if (!frameCanvas || !state.canvasContext) {
+        return;
+    }
+
+    state.canvasContext.clearRect(0, 0, state.canvasCssWidth, state.canvasCssHeight);
+    state.canvasContext.drawImage(frameCanvas, 0, 0, state.canvasCssWidth, state.canvasCssHeight);
 }
 
 function updateSpriteRect() {
     state.spriteRect = elements.spriteWindow.getBoundingClientRect();
+    syncCanvasSize();
 }
 
 function scheduleRender() {
@@ -257,7 +262,7 @@ function render() {
         updateSpriteRect();
     }
 
-    setFrame(state.sensorActive ? orientationToFrame() : pointerToFrame());
+    drawFrame(state.sensorActive ? orientationToFrame() : pointerToFrame());
 }
 
 function setPointer(clientX, clientY) {
@@ -273,7 +278,7 @@ function setPointer(clientX, clientY) {
 }
 
 function handlePointerMove(event) {
-    if (state.sensorActive) {
+    if (!state.spriteReady || state.sensorActive) {
         return;
     }
 
@@ -289,12 +294,12 @@ function handlePointerLeave() {
     state.pointerX = -1000;
     state.pointerY = -1000;
     state.lastAngle = null;
-    setFrame(spriteConfig.defaultFrame);
+    drawFrame(spriteConfig.defaultFrame);
     elements.spriteWindow.classList.add("is-idle");
 }
 
 function handleTouchMove(event) {
-    if (!event.touches || !event.touches[0] || state.sensorActive) {
+    if (!state.spriteReady || !event.touches || !event.touches[0] || state.sensorActive) {
         return;
     }
 
@@ -362,21 +367,111 @@ function markSpriteReady() {
     }
 
     state.spriteReady = true;
+
     elements.spriteWindow.classList.remove("is-loading");
     elements.spriteWindow.classList.add("is-ready");
     updateSpriteRect();
-    scheduleRender();
+    drawFrame(spriteConfig.defaultFrame);
 }
 
-function preloadSprite() {
+function syncCanvasSize() {
+    const rect = elements.spriteWindow.getBoundingClientRect();
+    const cssWidth = Math.max(1, Math.round(rect.width));
+    const cssHeight = Math.max(1, Math.round(rect.height));
+    const devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+
+    if (
+        state.canvasCssWidth === cssWidth
+        && state.canvasCssHeight === cssHeight
+        && state.canvasPixelRatio === devicePixelRatio
+    ) {
+        return;
+    }
+
+    state.canvasCssWidth = cssWidth;
+    state.canvasCssHeight = cssHeight;
+    state.canvasPixelRatio = devicePixelRatio;
+    elements.spriteCanvas.width = cssWidth * devicePixelRatio;
+    elements.spriteCanvas.height = cssHeight * devicePixelRatio;
+
+    if (!state.canvasContext) {
+        state.canvasContext = elements.spriteCanvas.getContext("2d", { alpha: true });
+    }
+
+    state.canvasContext.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    state.canvasContext.imageSmoothingEnabled = true;
+    state.canvasContext.imageSmoothingQuality = "high";
+
+    if (state.spriteReady && state.sourceImage) {
+        buildFrameCanvases(state.sourceImage);
+        state.renderedFrame = -1;
+        drawFrame(state.sensorActive ? orientationToFrame() : pointerToFrame());
+    }
+}
+
+function buildFrameCanvases(image) {
+    const targetWidth = Math.max(1, Math.round(state.spriteRect?.width || elements.spriteWindow.clientWidth || spriteConfig.frameWidth));
+    const targetHeight = Math.max(1, Math.round(state.spriteRect?.height || elements.spriteWindow.clientHeight || spriteConfig.frameHeight));
+
+    state.frameBitmaps = Array.from({ length: totalFrames }, (_, frame) => {
+        const frameCanvas = document.createElement("canvas");
+        frameCanvas.width = targetWidth;
+        frameCanvas.height = targetHeight;
+
+        const frameContext = frameCanvas.getContext("2d", { alpha: true });
+        frameContext.imageSmoothingEnabled = true;
+        frameContext.imageSmoothingQuality = "high";
+
+        const sourceX = (frame % spriteConfig.cols) * spriteConfig.frameWidth;
+        const sourceY = Math.floor(frame / spriteConfig.cols) * spriteConfig.frameHeight;
+
+        frameContext.drawImage(
+            image,
+            sourceX,
+            sourceY,
+            spriteConfig.frameWidth,
+            spriteConfig.frameHeight,
+            0,
+            0,
+            targetWidth,
+            targetHeight
+        );
+
+        return frameCanvas;
+    });
+}
+
+async function preloadSprite() {
     elements.spriteWindow.classList.add("is-loading");
+    updateSpriteRect();
 
     const sprite = new Image();
-    sprite.onload = markSpriteReady;
-    sprite.onerror = markSpriteReady;
-    sprite.src = new URL("./assets/sprite.webp", window.location.href).href;
+    const spriteLoaded = new Promise((resolve, reject) => {
+        sprite.onload = resolve;
+        sprite.onerror = reject;
+    });
+    sprite.src = spriteAssetUrl;
+    state.sourceImage = sprite;
 
-    window.setTimeout(markSpriteReady, spriteConfig.loaderTimeoutMs);
+    try {
+        await spriteLoaded;
+
+        if (typeof sprite.decode === "function") {
+            try {
+                await sprite.decode();
+            } catch (error) {
+                // Some browsers can still render the image even when decode() rejects.
+                console.warn("Sprite decode fallback to loaded image:", error);
+            }
+        }
+    } catch (error) {
+        console.error("Sprite load failed:", error);
+        markSpriteReady();
+        return;
+    }
+
+    buildFrameCanvases(sprite);
+    markSpriteReady();
 }
 
 function bindEvents() {
@@ -394,7 +489,7 @@ function bindEvents() {
 function initialize() {
     populateProfile();
     updateSpriteRect();
-    setFrame(spriteConfig.defaultFrame);
+    syncCanvasSize();
     elements.spriteWindow.classList.add("is-idle");
     preloadSprite();
     bindEvents();
