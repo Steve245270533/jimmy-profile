@@ -20,7 +20,8 @@ const spriteConfig = {
     invertDirection: true,
     nearLockRatio: 0.12,
     angleDeadZone: 2.5,
-    frameDeadZone: 1
+    frameDeadZone: 1,
+    loaderTimeoutMs: 5000
 };
 
 const totalFrames = spriteConfig.validFrames;
@@ -56,7 +57,8 @@ const elements = {
     sensorButton: document.getElementById("sensor-button"),
     sensorHint: document.getElementById("sensor-hint"),
     spriteWindow: document.getElementById("sprite-window"),
-    spriteSheet: document.getElementById("sprite-sheet")
+    spriteSheet: document.getElementById("sprite-sheet"),
+    spriteLoader: document.getElementById("sprite-loader")
 };
 
 const state = {
@@ -70,7 +72,8 @@ const state = {
     pointerActive: false,
     orientationHandler: null,
     spriteRect: null,
-    lastAngle: null
+    lastAngle: null,
+    spriteReady: false
 };
 
 function populateProfile() {
@@ -168,7 +171,10 @@ function directionToFrame(deltaX, deltaY) {
         : correctedAngle % fullTurn;
     const degrees = normalizedAngle * 180 / Math.PI;
 
-    if (state.lastAngle !== null && Math.abs(getSignedAngleDistance(state.lastAngle, degrees)) < spriteConfig.angleDeadZone) {
+    if (
+        state.lastAngle !== null
+        && Math.abs(getSignedAngleDistance(state.lastAngle, degrees)) < spriteConfig.angleDeadZone
+    ) {
         return state.renderedFrame < 0 ? spriteConfig.defaultFrame : state.renderedFrame;
     }
 
@@ -187,6 +193,7 @@ function directionToFrame(deltaX, deltaY) {
 
 function pointerToFrame() {
     if (!state.pointerActive) {
+        state.lastAngle = null;
         return spriteConfig.defaultFrame;
     }
 
@@ -265,7 +272,7 @@ function handlePointerLeave() {
 }
 
 function handleTouchMove(event) {
-    if (!event.touches || !event.touches[0]) {
+    if (!event.touches || !event.touches[0] || state.sensorActive) {
         return;
     }
 
@@ -327,6 +334,29 @@ async function activateSensorMode() {
     }
 }
 
+function markSpriteReady() {
+    if (state.spriteReady) {
+        return;
+    }
+
+    state.spriteReady = true;
+    elements.spriteWindow.classList.remove("is-loading");
+    elements.spriteWindow.classList.add("is-ready");
+    updateSpriteRect();
+    scheduleRender();
+}
+
+function preloadSprite() {
+    elements.spriteWindow.classList.add("is-loading");
+
+    const sprite = new Image();
+    sprite.onload = markSpriteReady;
+    sprite.onerror = markSpriteReady;
+    sprite.src = new URL("./assets/sprite.webp", window.location.href).href;
+
+    window.setTimeout(markSpriteReady, spriteConfig.loaderTimeoutMs);
+}
+
 function bindEvents() {
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("pointerleave", handlePointerLeave, { passive: true });
@@ -344,6 +374,7 @@ function initialize() {
     updateSpriteRect();
     setFrame(spriteConfig.defaultFrame);
     elements.spriteWindow.classList.add("is-idle");
+    preloadSprite();
     bindEvents();
 }
 
