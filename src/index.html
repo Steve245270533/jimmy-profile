@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jimmy | 吉咪的小猫名片</title>
+    <meta
+        name="description"
+        content="Jimmy 吉咪的互动名片页。把鼠标移到不同位置，看看小猫如何转头望向你。"
+    >
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Varela+Round&family=Nunito:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+    >
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <div class="page-shell">
+        <div class="paper-noise" aria-hidden="true"></div>
+        <main class="card-stage" aria-labelledby="hero-title">
+            <header class="hero-intro">
+                <p class="eyebrow">Interactive Cat Calling Card</p>
+                <h1 id="hero-title">Jimmy <span>/ 吉咪</span></h1>
+                <p class="hero-copy">
+                    一张会回望你的数字名片。把鼠标挪近一点，
+                    看看 Jimmy 会把视线落在哪里。
+                </p>
+            </header>
+
+            <section class="profile-board" aria-label="Jimmy 的名片信息">
+                <article class="note-card note-card-a" aria-labelledby="profile-basic">
+                    <p class="card-tag">basic notes</p>
+                    <h2 id="profile-basic">小猫档案</h2>
+                    <dl class="profile-list" id="profile-basic-list"></dl>
+                </article>
+
+                <div class="cat-spotlight">
+                    <div class="spotlight-ring spotlight-ring-back" aria-hidden="true"></div>
+                    <figure class="sprite-portrait">
+                        <div
+                            class="sprite-window"
+                            id="sprite-window"
+                            role="img"
+                            aria-label="Jimmy 的互动头像，会跟随你的鼠标或设备方向转头"
+                        >
+                            <div class="sprite-sheet sprite-sheet-base" id="sprite-sheet-base"></div>
+                            <div class="sprite-sheet sprite-sheet-blend" id="sprite-sheet-blend"></div>
+                        </div>
+                        <figcaption class="sprite-caption">
+                            <span class="caption-pin"></span>
+                            Jimmy is watching you with patient orange-cat curiosity.
+                        </figcaption>
+                    </figure>
+                    <div class="spotlight-ring spotlight-ring-front" aria-hidden="true"></div>
+                </div>
+
+                <article class="note-card note-card-b" aria-labelledby="profile-likes">
+                    <p class="card-tag">favorite things</p>
+                    <h2 id="profile-likes">偏爱清单</h2>
+                    <ul class="pill-list" id="likes-list"></ul>
+                </article>
+
+                <article class="note-card note-card-c" aria-labelledby="profile-traits">
+                    <p class="card-tag">little temperament</p>
+                    <h2 id="profile-traits">性格碎碎念</h2>
+                    <p class="tagline" id="tagline-text"></p>
+                    <ul class="traits-list" id="traits-list"></ul>
+                    <button type="button" class="sensor-button" id="sensor-button">
+                        开启感应模式
+                    </button>
+                    <p class="sensor-hint" id="sensor-hint">
+                        手机端可尝试轻微陀螺仪视线跟随；若设备不支持，会自动回退到触摸互动。
+                    </p>
+                </article>
+            </section>
+        </main>
+    </div>
+
+    <script src="./main.js"></script>
+</body>
+</html>
